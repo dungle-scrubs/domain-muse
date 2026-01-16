@@ -2,6 +2,12 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 
+/**
+ * Gets the configured language model based on environment variables.
+ * Checks providers in order: Anthropic, OpenAI, OpenRouter.
+ * @returns Configured language model instance
+ * @throws Error if no API key is configured
+ */
 export function getModel(): LanguageModel {
 	if (process.env.ANTHROPIC_API_KEY) {
 		const anthropic = createAnthropic({

@@ -13,6 +13,12 @@ const GenerationResultSchema = z.object({
 	reasoning: z.string(),
 });
 
+/**
+ * Builds the LLM prompt for domain name generation.
+ * @param concept - The concept or idea to generate domain names for
+ * @param options - Generation options (count, maxWords, hyphens, etc.)
+ * @returns Formatted prompt string for the LLM
+ */
 function buildPrompt(concept: string, options: GenerateOptions): string {
 	const count = options.count ?? 30;
 	const maxWords = options.maxWords ?? 3;
@@ -90,6 +96,12 @@ IMPORTANT: For each name, count the SEMANTIC words:
 - "track-daily" = 2 words`;
 }
 
+/**
+ * Generates domain name ideas using an LLM.
+ * @param concept - The concept or idea to generate domain names for
+ * @param options - Generation options
+ * @returns Generated domain ideas with LLM reasoning
+ */
 export async function generateDomainIdeas(
 	concept: string,
 	options: GenerateOptions = {},
@@ -129,6 +141,12 @@ export async function generateDomainIdeas(
 	return { ideas, reasoning: object.reasoning };
 }
 
+/**
+ * Combines domain name ideas with TLDs to create full domain names.
+ * @param ideas - Array of domain name ideas
+ * @param tlds - Array of TLDs to combine with (e.g., ["com", "io"])
+ * @returns Array of full domain names with metadata
+ */
 export function combineWithTlds(
 	ideas: DomainIdea[],
 	tlds: string[],
