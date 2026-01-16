@@ -1,0 +1,21 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*~
+
+# Claude Code
+.claude/
+plan.md
+*-plan.md

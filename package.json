@@ -1,0 +1,47 @@
+{
+	"name": "domain-muse",
+	"version": "0.1.0",
+	"description": "CLI tool for checking domain name availability via Namecheap API",
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"bin": {
+		"domain-muse": "./dist/cli.js"
+	},
+	"scripts": {
+		"build": "tsc",
+		"dev": "tsc --watch",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write .",
+		"typecheck": "tsc --noEmit",
+		"prepare": "husky"
+	},
+	"keywords": ["domain", "cli", "namecheap", "availability"],
+	"license": "MIT",
+	"devDependencies": {
+		"@biomejs/biome": "^1.9.4",
+		"@types/node": "^22.15.29",
+		"husky": "^9.1.7",
+		"typescript": "^5.8.3"
+	},
+	"dependencies": {
+		"@ai-sdk/anthropic": "^3.0.14",
+		"@ai-sdk/openai": "^3.0.11",
+		"ai": "^6.0.37",
+		"chalk": "^5.6.2",
+		"cli-table3": "^0.6.5",
+		"commander": "^13.1.0",
+		"ora": "^9.0.0",
+		"p-limit": "^7.2.0",
+		"zod": "^4.3.5"
+	},
+	"engines": {
+		"node": ">=20"
+	}
+}
