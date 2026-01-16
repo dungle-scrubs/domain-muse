@@ -8,12 +8,26 @@ import type {
 	TldPricing,
 } from "./types.js";
 
+/**
+ * Result from a domain search operation.
+ */
 export interface SearchResult {
+	/** Matched domains with availability and pricing */
 	domains: DomainSearchResult[];
+	/** LLM reasoning about the generation process */
 	reasoning: string;
+	/** TLD pricing map for reference */
 	pricing: Map<string, TldPricing>;
 }
 
+/**
+ * Generates domain name ideas and checks availability.
+ * Combines LLM generation, RDAP/WHOIS availability checks, and optional Namecheap pricing.
+ * @param concept - The concept or idea to generate domain names for
+ * @param options - Search and filter options
+ * @param namecheapConfig - Optional Namecheap config for pricing data
+ * @returns Search results with domains, reasoning, and pricing
+ */
 export async function searchDomains(
 	concept: string,
 	options: SearchOptions,
@@ -75,7 +89,8 @@ export async function searchDomains(
 		const maxPrice = options.maxPrice;
 		domains = domains.filter((d) => {
 			const price = d.isPremium ? d.premiumPrice : d.registerPrice;
-			return price !== undefined && price <= maxPrice;
+			// Include domains with unknown pricing (don't exclude based on missing data)
+			return price === undefined || price <= maxPrice;
 		});
 	}
 
