@@ -1,5 +1,8 @@
 # domain-muse
 
+[![CI](https://github.com/dungle-scrubs/domain-muse/actions/workflows/ci.yml/badge.svg)](https://github.com/dungle-scrubs/domain-muse/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 AI-powered domain name generator and availability checker. Give it a concept, get back available domain names.
 
 ## Features
@@ -27,7 +30,7 @@ AI-powered domain name generator and availability checker. Give it a concept, ge
 
 ```bash
 # Clone and install
-git clone https://github.com/YOUR_USERNAME/domain-muse.git
+git clone https://github.com/dungle-scrubs/domain-muse.git
 cd domain-muse
 pnpm install
 pnpm build

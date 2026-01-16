@@ -3,7 +3,7 @@
 ## Development Setup
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/domain-muse.git
+git clone https://github.com/dungle-scrubs/domain-muse.git
 cd domain-muse
 pnpm install
 ```

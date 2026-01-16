@@ -1,7 +1,7 @@
 {
 	"name": "domain-muse",
 	"version": "0.1.0",
-	"description": "CLI tool for checking domain name availability via Namecheap API",
+	"description": "AI-powered domain name generator and availability checker",
 	"type": "module",
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
@@ -14,15 +14,35 @@
 	"bin": {
 		"domain-muse": "./dist/cli.js"
 	},
+	"files": ["dist"],
 	"scripts": {
 		"build": "tsc",
 		"dev": "tsc --watch",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
 		"typecheck": "tsc --noEmit",
-		"prepare": "husky"
+		"prepare": "husky",
+		"prepublishOnly": "pnpm run build"
 	},
-	"keywords": ["domain", "cli", "namecheap", "availability"],
+	"keywords": [
+		"domain",
+		"cli",
+		"namecheap",
+		"availability",
+		"ai",
+		"llm",
+		"rdap",
+		"whois"
+	],
+	"author": "Kevin Frilot",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/dungle-scrubs/domain-muse.git"
+	},
+	"bugs": {
+		"url": "https://github.com/dungle-scrubs/domain-muse/issues"
+	},
+	"homepage": "https://github.com/dungle-scrubs/domain-muse#readme",
 	"license": "MIT",
 	"devDependencies": {
 		"@biomejs/biome": "^1.9.4",
