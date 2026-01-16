@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import chalk from "chalk";
 import Table from "cli-table3";
-import { program } from "commander";
+import { InvalidArgumentError, program } from "commander";
 import ora from "ora";
 import { getTldPricing } from "./namecheap.js";
 import { checkDomains } from "./rdap.js";
@@ -12,6 +12,91 @@ import type {
 	NamecheapConfig,
 } from "./types.js";
 
+/**
+ * Parses and validates a positive integer CLI argument.
+ * @param value - Raw string value from CLI
+ * @param name - Argument name for error messages
+ * @returns Parsed positive integer
+ * @throws InvalidArgumentError if not a positive integer
+ */
+function parsePositiveInt(value: string, name: string): number {
+	const parsed = Number.parseInt(value, 10);
+	if (Number.isNaN(parsed) || parsed <= 0) {
+		throw new InvalidArgumentError(`${name} must be a positive integer`);
+	}
+	return parsed;
+}
+
+/**
+ * Parses and validates a non-negative float CLI argument.
+ * @param value - Raw string value from CLI
+ * @param name - Argument name for error messages
+ * @returns Parsed non-negative number
+ * @throws InvalidArgumentError if negative or NaN
+ */
+function parseNonNegativeFloat(value: string, name: string): number {
+	const parsed = Number.parseFloat(value);
+	if (Number.isNaN(parsed) || parsed < 0) {
+		throw new InvalidArgumentError(`${name} must be a non-negative number`);
+	}
+	return parsed;
+}
+
+/**
+ * Parses and validates creativity level (0-1 range).
+ * @param value - Raw string value from CLI
+ * @returns Parsed creativity value
+ * @throws InvalidArgumentError if not in 0-1 range
+ */
+function parseCreativity(value: string): number {
+	const parsed = Number.parseFloat(value);
+	if (Number.isNaN(parsed) || parsed < 0 || parsed > 1) {
+		throw new InvalidArgumentError("creativity must be between 0 and 1");
+	}
+	return parsed;
+}
+
+/**
+ * Parses comma-separated TLD list, filtering empty strings.
+ * @param value - Comma-separated TLD string (e.g., "com,io,co")
+ * @returns Array of lowercase TLDs
+ * @throws InvalidArgumentError if no valid TLDs provided
+ */
+function parseTlds(value: string): string[] {
+	const tlds = value
+		.split(",")
+		.map((t) => t.trim().toLowerCase())
+		.filter((t) => t.length > 0);
+	if (tlds.length === 0) {
+		throw new InvalidArgumentError("at least one TLD is required");
+	}
+	return tlds;
+}
+
+/** Valid sort option values */
+const VALID_SORT_OPTIONS = ["price", "name", "length"] as const;
+/** Sort option type derived from valid options */
+type SortOption = (typeof VALID_SORT_OPTIONS)[number];
+
+/**
+ * Parses and validates sort option.
+ * @param value - Raw string value from CLI
+ * @returns Validated sort option
+ * @throws InvalidArgumentError if not a valid sort option
+ */
+function parseSort(value: string): SortOption {
+	if (!VALID_SORT_OPTIONS.includes(value as SortOption)) {
+		throw new InvalidArgumentError(
+			`sort must be one of: ${VALID_SORT_OPTIONS.join(", ")}`,
+		);
+	}
+	return value as SortOption;
+}
+
+/**
+ * Gets Namecheap configuration from environment variables.
+ * @returns Config object if credentials are set, undefined otherwise
+ */
 function getNamecheapConfig(): NamecheapConfig | undefined {
 	const apiUser = process.env.NAMECHEAP_API_USER;
 	const apiKey = process.env.NAMECHEAP_API_KEY;
@@ -29,6 +114,11 @@ function getNamecheapConfig(): NamecheapConfig | undefined {
 	};
 }
 
+/**
+ * Gets Namecheap config or exits with error if not configured.
+ * @returns Namecheap configuration
+ * @exits Process exits with code 1 if credentials missing
+ */
 function requireNamecheapConfig(): NamecheapConfig {
 	const config = getNamecheapConfig();
 	if (!config) {
@@ -42,11 +132,21 @@ function requireNamecheapConfig(): NamecheapConfig {
 	return config;
 }
 
+/**
+ * Formats a price for display with dollar sign and color.
+ * @param price - Price value or undefined
+ * @returns Formatted price string (green) or dash (dim) if undefined
+ */
 function formatPrice(price: number | undefined): string {
 	if (price === undefined) return chalk.dim("-");
 	return chalk.green(`$${price.toFixed(2)}`);
 }
 
+/**
+ * Formats domain availability status with appropriate color.
+ * @param domain - Domain check or search result
+ * @returns Colored status string (error/taken/premium/available)
+ */
 function formatAvailability(
 	domain: DomainSearchResult | DomainCheckResult,
 ): string {
@@ -56,6 +156,10 @@ function formatAvailability(
 	return chalk.green("available");
 }
 
+/**
+ * Prints domain search results as a formatted table.
+ * @param domains - Array of domain search results
+ */
 function printSearchTable(domains: DomainSearchResult[]): void {
 	const table = new Table({
 		head: [
@@ -97,6 +201,10 @@ function printSearchTable(domains: DomainSearchResult[]): void {
 	console.log(table.toString());
 }
 
+/**
+ * Prints a summary of search results (available, premium, errors).
+ * @param domains - Array of domain search results
+ */
 function printSummary(domains: DomainSearchResult[]): void {
 	const available = domains.filter((d) => d.available && !d.error);
 	const premium = available.filter((d) => d.isPremium);
@@ -132,9 +240,23 @@ program
 	.command("search")
 	.description("Generate domain ideas from a concept and check availability")
 	.argument("<concept>", "The concept or idea to generate domain names for")
-	.option("-t, --tlds <tlds>", "Comma-separated TLDs to check", "com,io,co")
-	.option("-c, --count <n>", "Number of domain ideas to generate", "30")
-	.option("-w, --max-words <n>", "Maximum words per domain name", "3")
+	.option("-t, --tlds <tlds>", "Comma-separated TLDs to check", parseTlds, [
+		"com",
+		"io",
+		"co",
+	])
+	.option(
+		"-c, --count <n>",
+		"Number of domain ideas to generate",
+		(v) => parsePositiveInt(v, "count"),
+		30,
+	)
+	.option(
+		"-w, --max-words <n>",
+		"Maximum words per domain name",
+		(v) => parsePositiveInt(v, "max-words"),
+		3,
+	)
 	.option("--hyphens", "Allow hyphens in domain names", true)
 	.option("--no-hyphens", "Disallow hyphens in domain names")
 	.option("--abbreviations", "Allow abbreviations", true)
@@ -142,13 +264,23 @@ program
 	.option(
 		"--creativity <n>",
 		"Creativity level 0-1 (higher = more creative)",
-		"0.9",
+		parseCreativity,
+		0.9,
 	)
 	.option("--available-only", "Only show available domains", false)
 	.option("--no-premium", "Exclude premium domains")
-	.option("--max-price <n>", "Maximum price filter")
-	.option("--max-length <n>", "Maximum domain name length (characters)")
-	.option("--sort <by>", "Sort results: price, name, or length", "price")
+	.option("--max-price <n>", "Maximum price filter", (v) =>
+		parseNonNegativeFloat(v, "max-price"),
+	)
+	.option("--max-length <n>", "Maximum domain name length (characters)", (v) =>
+		parsePositiveInt(v, "max-length"),
+	)
+	.option(
+		"--sort <by>",
+		"Sort results: price, name, or length",
+		parseSort,
+		"price",
+	)
 	.option("--json", "Output as JSON", false)
 	.option("--reasoning", "Show LLM reasoning", true)
 	.option("--no-reasoning", "Hide LLM reasoning")
@@ -167,21 +299,17 @@ program
 			const result = await searchDomains(
 				concept,
 				{
-					tlds: options.tlds.split(",").map((t: string) => t.trim()),
-					count: Number.parseInt(options.count, 10),
-					maxWords: Number.parseInt(options.maxWords, 10),
+					tlds: options.tlds,
+					count: options.count,
+					maxWords: options.maxWords,
 					allowHyphens: options.hyphens,
 					allowAbbreviations: options.abbreviations,
-					creativity: Number.parseFloat(options.creativity),
+					creativity: options.creativity,
 					availableOnly: options.availableOnly,
 					excludePremium: !options.premium,
-					maxPrice: options.maxPrice
-						? Number.parseFloat(options.maxPrice)
-						: undefined,
-					maxLength: options.maxLength
-						? Number.parseInt(options.maxLength, 10)
-						: undefined,
-					sortBy: options.sort as "price" | "name" | "length",
+					maxPrice: options.maxPrice,
+					maxLength: options.maxLength,
+					sortBy: options.sort,
 				},
 				namecheapConfig,
 			);
