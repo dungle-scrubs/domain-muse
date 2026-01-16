@@ -70,15 +70,31 @@ const IANA_BOOTSTRAP = "https://data.iana.org/rdap/dns.json";
 
 let bootstrapCache: Record<string, string> | null = null;
 
+/**
+ * Validates domain name format to prevent injection attacks.
+ * @param domain - Domain name to validate
+ * @returns True if domain format is valid
+ */
 function isValidDomain(domain: string): boolean {
 	if (!domain || domain.length > 253) return false;
 	return DOMAIN_REGEX.test(domain);
 }
 
+/**
+ * Delays execution for the specified duration.
+ * @param ms - Milliseconds to sleep
+ */
 function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Retries an async function with exponential backoff.
+ * @param fn - Function to retry
+ * @param retries - Maximum number of retries (default: MAX_RETRIES)
+ * @returns Result of the function
+ * @throws Last error if all retries fail
+ */
 async function withRetry<T>(
 	fn: () => Promise<T>,
 	retries = MAX_RETRIES,
@@ -97,6 +113,11 @@ async function withRetry<T>(
 	throw lastError;
 }
 
+/**
+ * Fetches RDAP bootstrap servers from IANA, with fallback to hardcoded list.
+ * Results are cached for subsequent calls.
+ * @returns Map of TLD to RDAP server URL
+ */
 async function getBootstrapServers(): Promise<Record<string, string>> {
 	if (bootstrapCache) return bootstrapCache;
 
@@ -128,6 +149,11 @@ async function getBootstrapServers(): Promise<Record<string, string>> {
 	}
 }
 
+/**
+ * Checks domain availability via WHOIS protocol.
+ * @param domain - Domain name to check
+ * @returns Domain check result with availability status
+ */
 async function checkViaWhois(domain: string): Promise<DomainCheckResult> {
 	const parts = domain.split(".");
 	const tld = parts[parts.length - 1]?.toLowerCase();
@@ -162,6 +188,12 @@ async function checkViaWhois(domain: string): Promise<DomainCheckResult> {
 	}
 }
 
+/**
+ * Checks domain availability via RDAP protocol.
+ * @param domain - Domain name to check
+ * @param rdapServer - RDAP server URL for the domain's TLD
+ * @returns Domain check result with availability status
+ */
 async function checkViaRdap(
 	domain: string,
 	rdapServer: string,
@@ -191,7 +223,20 @@ async function checkViaRdap(
 	}
 }
 
-async function checkSingleDomain(domain: string): Promise<DomainCheckResult> {
+/**
+ * Extended domain check result that tracks WHOIS fallback need.
+ */
+interface RdapCheckResult extends DomainCheckResult {
+	/** True if RDAP failed and WHOIS fallback is needed */
+	needsWhoisFallback?: boolean;
+}
+
+/**
+ * Attempts RDAP lookup, marking domains that need WHOIS fallback.
+ * @param domain - Domain name to check
+ * @returns Check result with fallback flag if RDAP unavailable/failed
+ */
+async function checkViaRdapOnly(domain: string): Promise<RdapCheckResult> {
 	// Validate domain format
 	if (!isValidDomain(domain)) {
 		return {
@@ -217,35 +262,36 @@ async function checkSingleDomain(domain: string): Promise<DomainCheckResult> {
 	const servers = await getBootstrapServers();
 	const rdapServer = servers[tld];
 
-	// Try RDAP first if available
-	if (rdapServer) {
-		const result = await checkViaRdap(domain, rdapServer);
-		if (!result.error) {
-			return result;
-		}
-		// RDAP failed, fall through to WHOIS
+	if (!rdapServer) {
+		// No RDAP server, needs WHOIS
+		return {
+			domain,
+			available: false,
+			isPremium: false,
+			needsWhoisFallback: true,
+		};
 	}
 
-	// Fall back to WHOIS
-	const whoisServer = WHOIS_SERVERS[tld];
-	if (whoisServer || !rdapServer) {
-		return checkViaWhois(domain);
+	const result = await checkViaRdap(domain, rdapServer);
+	if (result.error) {
+		// RDAP failed, mark for WHOIS fallback
+		return { ...result, needsWhoisFallback: true };
 	}
-
-	return {
-		domain,
-		available: false,
-		isPremium: false,
-		error: `No lookup method for .${tld}`,
-	};
+	return result;
 }
 
+/**
+ * Checks availability of multiple domains using RDAP with WHOIS fallback.
+ * Uses two-pass approach: RDAP first (10 concurrent), then WHOIS for failures (3 concurrent).
+ * @param domains - Array of domain names to check
+ * @returns Array of check results in same order as input
+ */
 export async function checkDomains(
 	domains: string[],
 ): Promise<DomainCheckResult[]> {
 	// Separate domains by lookup method for different concurrency limits
 	const rdapDomains: string[] = [];
-	const whoisDomains: string[] = [];
+	const whoisOnlyDomains: string[] = [];
 	const servers = await getBootstrapServers();
 
 	for (const domain of domains) {
@@ -253,24 +299,42 @@ export async function checkDomains(
 		if (tld && servers[tld]) {
 			rdapDomains.push(domain);
 		} else {
-			whoisDomains.push(domain);
+			whoisOnlyDomains.push(domain);
 		}
 	}
 
 	const rdapLimit = pLimit(RDAP_CONCURRENCY);
 	const whoisLimit = pLimit(WHOIS_CONCURRENCY);
 
-	const rdapPromises = rdapDomains.map((domain) =>
-		rdapLimit(() => checkSingleDomain(domain)),
-	);
-	const whoisPromises = whoisDomains.map((domain) =>
-		whoisLimit(() => checkSingleDomain(domain)),
+	// First pass: try RDAP for domains with RDAP servers
+	const rdapResults = await Promise.all(
+		rdapDomains.map((domain) => rdapLimit(() => checkViaRdapOnly(domain))),
 	);
 
-	const results = await Promise.all([...rdapPromises, ...whoisPromises]);
+	// Collect domains that need WHOIS fallback (RDAP failed or no RDAP server)
+	const needsWhoisFallback: string[] = [];
+	const successfulRdapResults: DomainCheckResult[] = [];
+
+	for (const result of rdapResults) {
+		if (result.needsWhoisFallback) {
+			needsWhoisFallback.push(result.domain);
+		} else {
+			successfulRdapResults.push(result);
+		}
+	}
+
+	// Second pass: WHOIS for domains without RDAP and failed RDAP domains
+	// All WHOIS requests go through whoisLimit for proper rate limiting
+	const allWhoisDomains = [...whoisOnlyDomains, ...needsWhoisFallback];
+	const whoisResults = await Promise.all(
+		allWhoisDomains.map((domain) => whoisLimit(() => checkViaWhois(domain))),
+	);
+
+	// Combine results
+	const allResults = [...successfulRdapResults, ...whoisResults];
 
 	// Reorder results to match input order
-	const resultMap = new Map(results.map((r) => [r.domain, r]));
+	const resultMap = new Map(allResults.map((r) => [r.domain, r]));
 	return domains.map(
 		(d) =>
 			resultMap.get(d) ?? {
@@ -282,5 +346,8 @@ export async function checkDomains(
 	);
 }
 
-// Keep old name as alias for backwards compatibility
+/**
+ * Alias for checkDomains (backwards compatibility).
+ * @deprecated Use checkDomains instead
+ */
 export const checkDomainsRdap = checkDomains;
