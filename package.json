@@ -1,5 +1,5 @@
 {
-	"name": "domain-muse",
+	"name": "@dungle-scrubs/domain-muse",
 	"version": "0.1.4",
 	"description": "AI-powered domain name generator and availability checker",
 	"type": "module",
@@ -14,7 +14,9 @@
 	"bin": {
 		"domain-muse": "./dist/cli.js"
 	},
-	"files": ["dist"],
+	"files": [
+		"dist"
+	],
 	"scripts": {
 		"build": "tsc",
 		"dev": "tsc --watch",
